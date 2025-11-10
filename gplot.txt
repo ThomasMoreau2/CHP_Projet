@@ -1,0 +1,23 @@
+#set terminal pngcairo size 1600,1200 enhanced font 'Helvetica,36'
+#set output 'solution_epique.png'
+set terminal wxt enhanced font 'Helvetica,24'
+
+# Labels des axes
+set xlabel "x" font ",36"
+set ylabel "y" font ",36"
+set zlabel "u(x,y)" font ",36"
+
+# Ticks
+set xtics font ",28"
+set ytics font ",28"
+set ztics font ",28"
+
+# Légende
+set key top right
+set key font ",32"
+set key spacing 1.5
+set key width -5
+
+# Tracé des deux surfaces
+splot "affichage.dat" title "Solution approchée" , \
+      x*(1-x)*y*(1-y)     title "Solution exacte"    

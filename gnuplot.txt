@@ -1,0 +1,24 @@
+# Script Gnuplot pour tracer "convergence.dat" en échelle log et calculer la pente
+
+# Spécifier le titre et les labels des axes
+set title "Convergence en échelle logarithmique"
+set xlabel "dx"
+set ylabel "erreur (norme 2)"
+
+# Utiliser l'échelle logarithmique pour les axes X et Y
+set logscale x
+set logscale y
+
+# Spécifier le format des axes
+set format x "10^{%L}"
+set format y "10^{%L}"
+
+# Effectuer une régression linéaire sur les données transformées (log(x), log(y))
+f(x) = a*x + b  # Fonction linéaire log-log
+fit f(x) "convergence.dat" using (log($1)):(log($2)) via a, b  # Ajuster la droite sur log(x) et log(y)
+
+# Tracer les données et la droite de régression
+plot "convergence.dat" using 1:2 with points title "Données", \
+f(x) title sprintf("Droit de régression: log(y) = %.3flog(x) + %.3f", a, b)
+
+
