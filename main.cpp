@@ -1,20 +1,35 @@
 #include "fonction.h"
 #include "produit.h"
 #include "grad_conj.h"
+#include "charge.h"
 #include <fstream>
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <mpi.h>
 
 using namespace std;
 
-int main()
-{   
-    int Nx, Ny, n_iter, N, cas;
+int main(int argc, char *argv[]){   
+    int Nx, Ny, n_iter, N, cas,r, nproc, iBeg, iEnd, rank;
     double Lx, Ly, D, dt, dx, dy, t, err;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (rank==0)
+    {
+            printf("Choissisez le cas: 1, 2 ou 3\n");
+            cin >> cas;
 
-    printf("Choissisez le cas: 1, 2 ou 3\n");
-    cin >> cas;
+    }
+    if (rank==0)
+    {
+            printf("Choississez le nombre de recouvrement\n");
+            cin >> r;
+
+    }
+    MPI_Bcast(&cas, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
     double (*f_ex)(double, double);
     if (cas == 1){f_ex = f1_ex;}
     else if (cas == 2) {f_ex = f2_ex;}
@@ -24,8 +39,24 @@ int main()
     file >> Nx >> Ny >> Lx >> Ly >> D >> dt ;
     file.close();
 
-    vector<double> U0(Nx*Ny), U(Nx*Ny), b(Nx*Ny), sol(Nx*Ny);
+    for(int i=0; i<nproc; i++){charge(rank, Nx*Ny, nproc, &iBeg, &iEnd);}
+    printf("Proc %d: iBeg = %d, iEnd = %d\n", rank, iBeg, iEnd);
 
+    vector<double>  sol(Nx*Ny), U_global(Nx*Ny);
+    if (iBeg==0)
+    {
+        vector<double> U0(iEnd-iBeg+1+r), U(iEnd-iBeg+1+r), b(iEnd-iBeg+1+r);
+    }
+    else if (iEnd==Nx*Ny-1)
+    {
+        vector<double> U0(iEnd-iBeg+1+r), U(iEnd-iBeg+1+r), b(iEnd-iBeg+1+r) ;  
+
+    }
+    else
+    {
+        vector<double> U0(iEnd-iBeg+1+2*r), U(iEnd-iBeg+1+2*r), b(iEnd-iBeg+1+2*r) ; 
+    }
+    
     N = Nx*Ny;
     dx = Lx/(Nx+1);
     dy = Ly/(Ny+1);
@@ -94,6 +125,7 @@ int main()
     // fermer fichier erreur
     // fichier.close();
     // --------------------------------------
+    MPI_Finalize();
 
     return 0;
 }
