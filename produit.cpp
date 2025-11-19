@@ -50,29 +50,34 @@ vector<double> prod_mat_vec(int Nx, int Ny, double D, double dx, double dy, doub
     return y;
 }
 
-vector<double> make_b(vector<double> u, int Nx, int Ny, double dx, double dy, double Lx, double Ly, double D, double dt, double t, int cas)
+vector<double> make_b(vector<double> u, int Nx, int Ny, double dx, double dy, double Lx, double Ly, double D, double dt, double t, int cas, 
+                int rank, int nproc, vector<double> u_gauche, vector<double> u_droit)
 {   
     double (*f)(double, double, double, double, double);
     double (*g)(double, double);
-    double (*h)(double, double);
+    double (*h_g)(double, double);
+    double (*h_d)(double, double);
 
    if (cas == 1) 
     {
         f = f1;
         g = g1;
-        h = h1;
+        h_g = h1;
+        h_d = h1;
     } 
     else if (cas == 2) 
     {
         f = f2;
         g = g2;
-        h = h2;
+        h_g = h2;
+        h_d = h2;
     } 
     else if (cas == 3) 
     {
         f = f3;
         g = g3;
-        h = h3;
+        h_g = h3;
+        h_d = h3;
     } 
 
     int n;
@@ -84,45 +89,57 @@ vector<double> make_b(vector<double> u, int Nx, int Ny, double dx, double dy, do
 
     vector<double> b(n);
 
-    b[0] = u[0] + dt*f(dx, dy, t, Lx, Ly) + lambda_x*h(0, dy) + lambda_y*g(dx, 0);
-    // printf("i=%d, j=%d, h(%d, %d), g(%d, %d)\n", 1, 1, 0, 1, 1, 0);
+    if (rank == 0)
+    {
+        for(int i=1; i<=Ny; i++){u[n - i] += u_droit[n - i];}
+        h_d = 0;
+
+    }
+
+    else if ((rank >0) && (rank <nproc-1))
+    {
+        h_d = 0;
+        h_g = 0;
+        for(int i=0; i<Ny; i++){u[i] += u_gauche[i];}
+        for(int i=1; i<=Ny; i++){u[n - i] += u_droit[n - i];}
+    }
+
+    else if (rank == nproc-1)
+    {
+        h_g = 0;
+        for(int i=0; i<Ny; i++){u[i] += u_gauche[i];}
+    }
+    
+
+    b[0] = u[0] + dt*f(dx, dy, t, Lx, Ly) + lambda_x*h_g(0, dy) + lambda_y*g(dx, 0);
     for (int i=1; i<Ny-1; i++)
     {
-        b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_x*h(0, (i%Ny+1)*dy);
-        // printf("i=%d, j=%d, h(%d, %d)\n", (i/Ny+1), (i%Ny+1), 0, (i%Ny+1));
+        b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_x*h_g(0, (i%Ny+1)*dy);
     }
-    b[Ny-1] = u[Ny-1] + dt*f(dx, Ny*dy, t, Lx, Ly) + lambda_x*h(0, Ny*dy) + lambda_y*g(dx, (Ny+1)*dy);
-    // printf("i=%d, j=%d, h(%d, %d), g(%d, %d)\n", 1, Ny, 0, Ny,1, (Ny+1));
+    b[Ny-1] = u[Ny-1] + dt*f(dx, Ny*dy, t, Lx, Ly) + lambda_x*h_g(0, Ny*dy) + lambda_y*g(dx, (Ny+1)*dy);
 
     for (int i=Ny; i<=n-Ny-1; i++)
     {   
         if ((i+1)%Ny==0)
         {
             b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_y*g((i/Ny+1)*dx, (Ny+1)*dy);
-            // printf("i=%d, j=%d, g(%d, %d)\n", i/Ny+1, i%Ny+1, i/Ny+1, Ny+1);
         } 
         else if (i%Ny==0)
         {
             b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_y*g((i/Ny+1)*dx, 0);
-            // printf("i=%d, j=%d, g(%d, %d)\n", i/Ny+1, i%Ny+1, i/Ny+1, 0);
         }
         else 
         {
             b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly);
-            // printf("i=%d, j=%d\n", i/Ny+1, i%Ny+1);
         }
     }
 
-    b[n-Ny] = u[n-Ny] + dt*f(((n-Ny)/Ny+1)*dx, ((n-Ny)%Ny+1)*dy, t, Lx, Ly) + lambda_x*h((Nx+1)*dx, ((n-Ny)%Ny+1)*dy) + lambda_y*g(((n-Ny)/Ny+1)*dx, 0);
-    // printf("i=%d, j=%d, h(%d, %d), g(%d, %d)\n", (n-Ny)/Ny+1, (n-Ny)%Ny+1, (Nx+1), (n-Ny)%Ny+1,(n-Ny)/Ny+1, 0);
+    b[n-Ny] = u[n-Ny] + dt*f(((n-Ny)/Ny+1)*dx, ((n-Ny)%Ny+1)*dy, t, Lx, Ly) + lambda_x*h_d((Nx+1)*dx, ((n-Ny)%Ny+1)*dy) + lambda_y*g(((n-Ny)/Ny+1)*dx, 0);
     for (int i=n-Ny+1; i<n-1; i++)
     {
-        b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_x*h((Nx+1)*dx, (i%Ny+1)*dy);
-        // printf("i=%d, j=%d, h(%d, %d)\n", i/Ny+1, i%Ny+1, Nx+1, i%Ny+1);
+        b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_x*h_d((Nx+1)*dx, (i%Ny+1)*dy);
     }
-    b[n-1] = u[n-1] + dt*f(Nx*dx, Ny*dy, t, Lx, Ly) + lambda_x*h((Nx+1)*dx, Ny*dy) + lambda_y*g(Nx*dx, (Ny+1)*dy);
-    // printf("i=%d, j=%d, h(%d, %d), g(%d, %d)\n", Nx, Ny, Nx+1, Ny, Nx, (Ny+1));
-
+    b[n-1] = u[n-1] + dt*f(Nx*dx, Ny*dy, t, Lx, Ly) + lambda_x*h_d((Nx+1)*dx, Ny*dy) + lambda_y*g(Nx*dx, (Ny+1)*dy);
 
     return b;
 }
