@@ -66,3 +66,7 @@ double norme2(vector<double>& u) {
     }
     return sqrt(somme);
 }
+
+double null_f(double x, double y) {
+    return 0;
+}

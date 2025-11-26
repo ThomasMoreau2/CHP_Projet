@@ -24,4 +24,6 @@ double f2_ex(double x,double y);
 
 double norme2(std::vector<double>& u);
 
+double null_f(double x, double y);
+
 #endif

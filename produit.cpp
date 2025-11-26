@@ -92,24 +92,25 @@ vector<double> make_b(vector<double> u, int Nx, int Ny, double dx, double dy, do
     if (rank == 0)
     {
         for(int i=1; i<=Ny; i++){u[n - i] += u_droit[n - i];}
-        h_d = 0;
+        h_d = null_f;
 
     }
 
     else if ((rank >0) && (rank <nproc-1))
     {
-        h_d = 0;
-        h_g = 0;
+        h_d = null_f;
+        h_g = null_f;
         for(int i=0; i<Ny; i++){u[i] += u_gauche[i];}
         for(int i=1; i<=Ny; i++){u[n - i] += u_droit[n - i];}
     }
 
     else if (rank == nproc-1)
     {
-        h_g = 0;
+        h_g = null_f;
         for(int i=0; i<Ny; i++){u[i] += u_gauche[i];}
     }
     
+
 
     b[0] = u[0] + dt*f(dx, dy, t, Lx, Ly) + lambda_x*h_g(0, dy) + lambda_y*g(dx, 0);
     for (int i=1; i<Ny-1; i++)
