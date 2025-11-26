@@ -95,7 +95,14 @@ int main(int argc, char *argv[])
         }
         U0=U;
     }
-    
+    vector<double> U_final(Nx*Ny);
+    // Rassembler les résultats de tous les processus
+    MPI_Allgather(U0.data() + ((rank == 0) ? 0 : (r-1)*Ny), 
+                  (iEnd - iBeg + 1)*Ny, MPI_DOUBLE, 
+                  U_final.data(), 
+                  (iEnd - iBeg + 1)*Ny, MPI_DOUBLE, 
+                  MPI_COMM_WORLD);
+                
     
     
     ofstream fichier("affichage.dat");
