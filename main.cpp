@@ -12,8 +12,8 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {   
-    int Nx, Ny, n_iter, N, cas, r, nproc, iBeg, iEnd, rank, N_loc;
-    double Lx, Ly, D, dt, dx, dy, t;
+    int Nx, Ny, n_iter, N, cas, r, nproc, iBeg, iEnd, rank, N_loc, iter_max, Nx_loc;
+    double Lx, Ly, D, dt, dx, dy, t, eps;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
@@ -31,84 +31,85 @@ int main(int argc, char *argv[])
 
 
     vector<double> U0, U, b;
-    if ((iBeg == 0) && (iEnd == Nx-1))
+    if ((rank == 0) || (rank == nproc-1))
     {
         N_loc = (iEnd-iBeg+1+(r-1))*Ny;
         U0.resize(N_loc); U.resize(N_loc); b.resize(N_loc);
+        Nx_loc = N_loc/Ny;
     }
     else 
     {   
         N_loc = (iEnd-iBeg+1+2*(r-1))*Ny;
         U0.resize(N_loc); U.resize(N_loc); b.resize(N_loc);
+        Nx_loc = N_loc/Ny;
     }
 
     printf("Proc %d: iBeg = %d, iEnd = %d, N_loc = %d\n", rank, iBeg, iEnd, N_loc);
 
-    vector<double> sol(Nx*Ny), u_Global(Nx*Ny);
+    // vector<double> sol(Nx*Ny), u_Global(Nx*Ny);
 
     N = Nx*Ny;
     dx = Lx/(Nx+1);
     dy = Ly/(Ny+1);
-    n_iter = 10;    
+    n_iter = 20;    
     t = 0;  
   
+    iter_max = 10;
+    eps = 0.001;
 
-    n_iter = 1;
-    t = 0;
+    for (int i=0; i<N_loc; i++){U0[i]=0;}
 
-
-    for (int i=0; i<N_loc; i++){U0[i]=0;
-    }
-
-    vector<double> U_g(Ny), U_d(Ny);
+    vector<double> U_g(Ny), U_d(Ny), U_g_0(Ny), U_d_0(Ny);
+    // for (int i=0; i<Ny; i++){U_g_0[i]=i; U_d_0[i]=i;}
 
     for (int i=0; i<n_iter; i++)
-    {      
-        int left = rank-1;
-        int right = rank+1;
-        printf("Proc %d: itération %d\n", rank, i);
+    {   
+        for (int j=0; j<iter_max; j++)
+        {    
+            int left = rank-1;
+            int right = rank+1;
 
-        if (rank==0){left = MPI_PROC_NULL;}
-        if (rank==nproc-1){right = MPI_PROC_NULL;}
+            if (rank==0){left = MPI_PROC_NULL;}
+            if (rank==nproc-1){right = MPI_PROC_NULL;}
 
-        // Envoie à droite, reçoit de gauche
-        MPI_Sendrecv(&U0[N_loc-r*Ny], Ny, MPI_DOUBLE, right, 0,
-        &U_g[0], Ny, MPI_DOUBLE, left, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        
-        
-        
-        // Envoie à gauche, reçoit de droite
-        MPI_Sendrecv(&U0[(r-1)*Ny], Ny, MPI_DOUBLE, left,  1, 
-        &U_d[0], Ny, MPI_DOUBLE, right, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        
+            // Envoie à droite, reçoit de gauche
+            MPI_Sendrecv(&U0[N_loc-2*r*Ny], Ny, MPI_DOUBLE, right, 0,
+            &U_g[0], Ny, MPI_DOUBLE, left, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            
+            // Envoie à gauche, reçoit de droite
+            MPI_Sendrecv(&U0[2*(r-1)*Ny], Ny, MPI_DOUBLE, left,  1, 
+            &U_d[0], Ny, MPI_DOUBLE, right, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            // for (int i = 0; i < Ny; i++)
+            // {
+            //     printf("Proc %d: U_g[%d] = %f\n", rank, i, U_g[i]);
+            // }
+
+            
+            b = make_b(U0, Nx_loc, Ny, dx, dy, Lx, Ly, D, dt, t, cas, rank, nproc, iBeg, U_g, U_d, r);
+            U = gradient_conjugue(Nx_loc, Ny, D, dx, dy, dt, b, 0.0001, 1000);
+
+            
+            U0=U;
+
+            // for (int i = 0; i < N_loc; i++)
+            // {
+            //     printf("Proc %d: U0[%d] = %f\n", rank, i, U0[i]);
+            // }
+
+
+        }
+
         t += dt;
-        b = make_b(U0, N_loc/Ny, Ny, dx, dy, Lx, Ly, D, dt, t, cas, rank, nproc, U_g, U_d);
-        for (int i = 0; i < N_loc; i++)
-        {
-            printf("Proc %d: b[%d] = %f\n", rank, i, b[i]);
-        }
-        
-        U = gradient_conjugue(N_loc/Ny, Ny, D, dx, dy, dt, b, 0.0001, 1000);
-        for (int i = 0; i < N_loc; i++)
-        {
-            printf("Proc %d: U[%d] = %f\n", rank, i, U[i]);
-        }
-        U0=U;
     }
-    vector<double> U_final(Nx*Ny);
-    // Rassembler les résultats de tous les processus
-    MPI_Allgather(U0.data() + ((rank == 0) ? 0 : (r-1)*Ny), 
-                  (iEnd - iBeg + 1)*Ny, MPI_DOUBLE, 
-                  U_final.data(), 
-                  (iEnd - iBeg + 1)*Ny, MPI_DOUBLE, 
-                  MPI_COMM_WORLD);
-                
-    
-    
-    ofstream fichier("affichage.dat");
-    for (int i=0; i<N; i++)
+ 
+    ofstream fichier("affichage.dat", ios::app);
+    int i_off;
+    if (rank==0){i_off = 0;}
+    else {i_off = (iBeg - r + 1);}
+    for (int i=0; i<N_loc; i++)
     {
-        fichier << (i/Ny+1)*dx << " " << (i%Ny+1)*dy << " " << U_final[i] << endl;
+        fichier << (i_off + i/Ny+1)*dx << " " << (i%Ny+1)*dy << " " << U[i] << endl;
     }
     fichier.close();
 

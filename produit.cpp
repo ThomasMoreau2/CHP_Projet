@@ -51,7 +51,7 @@ vector<double> prod_mat_vec(int Nx, int Ny, double D, double dx, double dy, doub
 }
 
 vector<double> make_b(vector<double> u, int Nx, int Ny, double dx, double dy, double Lx, double Ly, double D, double dt, double t, int cas, 
-                int rank, int nproc, vector<double> u_gauche, vector<double> u_droit)
+                int rank, int nproc, int iBeg, vector<double> u_gauche, vector<double> u_droit, int r)
 {   
     double (*f)(double, double, double, double, double);
     double (*g)(double, double);
@@ -91,7 +91,7 @@ vector<double> make_b(vector<double> u, int Nx, int Ny, double dx, double dy, do
 
     if (rank == 0)
     {
-        for(int i=1; i<=Ny; i++){u[n - i] += u_droit[n - i];}
+        for(int i=1; i<=Ny; i++){u[n - i] += lambda_x*u_droit[Ny - i];}
         h_d = null_f;
 
     }
@@ -100,47 +100,50 @@ vector<double> make_b(vector<double> u, int Nx, int Ny, double dx, double dy, do
     {
         h_d = null_f;
         h_g = null_f;
-        for(int i=0; i<Ny; i++){u[i] += u_gauche[i];}
-        for(int i=1; i<=Ny; i++){u[n - i] += u_droit[n - i];}
+        for(int i=0; i<Ny; i++){u[i] += lambda_x*u_gauche[i];}
+        for(int i=1; i<=Ny; i++){u[n - i] += lambda_x*u_droit[Ny - i];}
     }
 
     else if (rank == nproc-1)
     {
         h_g = null_f;
-        for(int i=0; i<Ny; i++){u[i] += u_gauche[i];}
+        for(int i=0; i<Ny; i++){u[i] += lambda_x*u_gauche[i];}
     }
-    
 
+    int i_off;
+    if (rank==0){i_off = 0;}
+    else {i_off = (iBeg - r + 1);}
 
-    b[0] = u[0] + dt*f(dx, dy, t, Lx, Ly) + lambda_x*h_g(0, dy) + lambda_y*g(dx, 0);
+    b[0] = u[0] + dt*f((i_off+1)*dx, dy, t, Lx, Ly) + lambda_x*h_g(0, dy) + lambda_y*g((i_off+1)*dx, 0);
     for (int i=1; i<Ny-1; i++)
     {
-        b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_x*h_g(0, (i%Ny+1)*dy);
+        b[i] = u[i] + dt*f((i_off+i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_x*h_g(0, (i%Ny+1)*dy);
     }
-    b[Ny-1] = u[Ny-1] + dt*f(dx, Ny*dy, t, Lx, Ly) + lambda_x*h_g(0, Ny*dy) + lambda_y*g(dx, (Ny+1)*dy);
+    b[Ny-1] = u[Ny-1] + dt*f((i_off+1)*dx, Ny*dy, t, Lx, Ly) + lambda_x*h_g(0, Ny*dy) + lambda_y*g(dx, (Ny+1)*dy);
 
     for (int i=Ny; i<=n-Ny-1; i++)
     {   
         if ((i+1)%Ny==0)
         {
-            b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_y*g((i/Ny+1)*dx, (Ny+1)*dy);
+            b[i] = u[i] + dt*f((i_off+i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_y*g((i_off+i/Ny+1)*dx, (Ny+1)*dy);
         } 
         else if (i%Ny==0)
         {
-            b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_y*g((i/Ny+1)*dx, 0);
+            b[i] = u[i] + dt*f((i_off+i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_y*g((i_off+i/Ny+1)*dx, 0);
         }
         else 
         {
-            b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly);
+            b[i] = u[i] + dt*f((i_off+i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly);
         }
     }
 
-    b[n-Ny] = u[n-Ny] + dt*f(((n-Ny)/Ny+1)*dx, ((n-Ny)%Ny+1)*dy, t, Lx, Ly) + lambda_x*h_d((Nx+1)*dx, ((n-Ny)%Ny+1)*dy) + lambda_y*g(((n-Ny)/Ny+1)*dx, 0);
+    b[n-Ny] = u[n-Ny] + dt*f((i_off+(n-Ny)/Ny+1)*dx, ((n-Ny)%Ny+1)*dy, t, Lx, Ly) + 
+                        lambda_x*h_d((i_off+Nx+1)*dx, ((n-Ny)%Ny+1)*dy) + lambda_y*g((i_off+(n-Ny)/Ny+1)*dx, 0);
     for (int i=n-Ny+1; i<n-1; i++)
     {
-        b[i] = u[i] + dt*f((i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_x*h_d((Nx+1)*dx, (i%Ny+1)*dy);
+        b[i] = u[i] + dt*f((i_off+i/Ny+1)*dx, (i%Ny+1)*dy, t, Lx, Ly) + lambda_x*h_d((i_off+Nx+1)*dx, (i%Ny+1)*dy);
     }
-    b[n-1] = u[n-1] + dt*f(Nx*dx, Ny*dy, t, Lx, Ly) + lambda_x*h_d((Nx+1)*dx, Ny*dy) + lambda_y*g(Nx*dx, (Ny+1)*dy);
+    b[n-1] = u[n-1] + dt*f((i_off+Nx)*dx, Ny*dy, t, Lx, Ly) + lambda_x*h_d((i_off+Nx+1)*dx, Ny*dy) + lambda_y*g((i_off+Nx)*dx, (Ny+1)*dy);
 
     return b;
 }
